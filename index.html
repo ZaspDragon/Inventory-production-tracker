@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Pallet Tracker — 45 in 8</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root{--ink:#0f172a;--muted:#64748b;--line:#e5e7eb;--brand:#2563eb;--bg:#f6f7fb;--good:#16a34a;--warn:#ea580c;--bad:#dc2626}
+    *{box-sizing:border-box}
+    body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--ink);margin:0}
+    .container{max-width:1000px;margin:24px auto;padding:0 16px}
+    .card{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.05);padding:16px;margin-bottom:16px}
+    h1{font-size:28px;margin:8px 0 16px}
+    h2{font-size:18px;margin:0 0 8px}
+    label{display:block;font-size:13px;color:#475569;margin:6px 0}
+    input,select,button{font:inherit}
+    input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px}
+    .row{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+    .col-4{grid-column:span 4}
+    .col-3{grid-column:span 3}
+    .col-6{grid-column:span 6}
+    .col-12{grid-column:span 12}
+    .btn{background:var(--brand);border:none;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer}
+    .btn.secondary{background:#0f172a0d;color:#0f172a;border:1px solid var(--line)}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}
+    tr:hover{background:#fafafa}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line)}
+    .stat{display:flex;gap:8px;align-items:baseline}
+    .stat b{font-size:22px}
+    .ok{color:var(--good)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+    .footer{font-size:12px;color:var(--muted);text-align:center;margin-top:12px}
+    .small{font-size:12px;color:var(--muted)}
+    .flex{display:flex;gap:8px;flex-wrap:wrap}
+    @media (max-width:720px){.col-6,.col-4,.col-3{grid-column:span 12}}
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h1>📦 Pallet Tracker — 45 in 8</h1>
+    <div class="row">
+      <div class="col-6">
+        <div class="stat"><span class="small">Shift started</span> <b id="shiftStart">—</b></div>
+        <div class="stat"><span class="small">Elapsed</span> <b id="elapsed">0h</b></div>
+      </div>
+      <div class="col-6">
+        <div class="stat"><span class="small">Pallets moved</span> <b id="totalPallets">0</b></div>
+        <div class="stat"><span class="small">Rate/hr</span> <b id="rateHr">0</b></div>
+      </div>
+    </div>
+    <div class="flex" style="margin-top:8px">
+      <button id="startShift" class="btn">Start / Restart Shift</button>
+      <button id="endShift" class="btn secondary">End Shift (keeps data)</button>
+      <button id="exportCsv" class="btn secondary">Export CSV</button>
+      <button id="clearAll" class="btn secondary">Clear All</button>
+    </div>
+    <p class="small">Goal: <b>45 pallets</b> in <b>8 hours</b> (<span id="goalRate">5.625</span> / hr). Goal status: <span id="goalStatus" class="pill">—</span></p>
+  </div>
+
+  <div class="card">
+    <h2>Add Move</h2>
+    <div class="row">
+      <div class="col-3">
+        <label>Item #</label>
+        <input id="item" placeholder="e.g., 601444">
+      </div>
+      <div class="col-3">
+        <label>Qty (pallets)</label>
+        <input id="qty" type="number" min="1" value="1">
+      </div>
+      <div class="col-3">
+        <label>From Bin (A-L)</label>
+        <input id="fromBin" placeholder="A-10-4">
+      </div>
+      <div class="col-3">
+        <label>To Bin (A-L)</label>
+        <input id="toBin" placeholder="A-09-1">
+      </div>
+      <div class="col-12">
+        <label>Notes (optional)</label>
+        <input id="notes" placeholder="any details...">
+      </div>
+    </div>
+    <div class="flex" style="margin-top:12px">
+      <button id="add" class="btn">Add Entry</button>
+    </div>
+    <p class="small">Tip: bins auto-format to <code>LETTER-##-#</code>. Letters limited to A–L.</p>
+  </div>
+
+  <div class="card">
+    <h2>Today’s Moves</h2>
+    <table id="logTable">
+      <thead><tr>
+        <th>Time</th><th>Item #</th><th>Qty</th><th>From</th><th>To</th><th>Notes</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="footer">Stored locally on your device (offline ready). Export to CSV to share.</div>
+  </div>
+</div>
+
+<script>
+const GOAL_TOTAL = 45;
+const GOAL_HOURS = 8;
+const GOAL_RATE = GOAL_TOTAL/GOAL_HOURS;
+
+const $ = (id)=>document.getElementById(id);
+
+function nowISO(){ return new Date().toISOString(); }
+function fmtTime(s){ const d=new Date(s); return d.toLocaleString(); }
+function clampBin(v){
+  v = (v||'').toUpperCase().replace(/\s+/g,'');
+  // accept formats like A-10-4 or a104, normalize to A-10-4
+  const m = v.match(/^([A-L])[- ]?(\d{1,2})[- ]?(\d{1})$/i);
+  if(m){
+    const letter = m[1].toUpperCase();
+    const n1 = m[2].padStart(2,'0');
+    const n2 = m[3];
+    return `${letter}-${n1}-${n2}`;
+  }
+  return v;
+}
+
+function load(key, fallback){
+  try{ return JSON.parse(localStorage.getItem(key)) ?? fallback; }catch(e){ return fallback; }
+}
+function save(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+
+function todayKey(){
+  const d=new Date();
+  return d.toISOString().slice(0,10);
+}
+
+function getState(){
+  const day = todayKey();
+  const all = load('palletLogs', {});
+  if(!all[day]) all[day] = {shiftStart: null, entries: []};
+  return {day, all};
+}
+function setState(dayAll){ save('palletLogs', dayAll); }
+
+function refresh(){
+  const {day, all} = getState();
+  const st = all[day];
+  $('shiftStart').textContent = st.shiftStart ? fmtTime(st.shiftStart) : '—';
+  // totals
+  let total = 0;
+  st.entries.forEach(e=> total += Number(e.qty)||0);
+  $('totalPallets').textContent = total;
+  // elapsed hours
+  let elapsedHrs = 0;
+  if(st.shiftStart){
+    elapsedHrs = (Date.now() - new Date(st.shiftStart).getTime())/3600000;
+    if(elapsedHrs < 0) elapsedHrs = 0;
+  }
+  $('elapsed').textContent = st.shiftStart ? `${elapsedHrs.toFixed(2)}h` : '0h';
+  const rate = elapsedHrs>0 ? total/elapsedHrs : 0;
+  $('rateHr').textContent = rate.toFixed(2);
+  $('goalRate').textContent = GOAL_RATE.toFixed(3);
+  const projected = elapsedHrs>0 ? rate*GOAL_HOURS : 0;
+  const goalClass = projected>=GOAL_TOTAL ? 'ok' : (projected>=GOAL_TOTAL*0.8?'warn':'bad');
+  $('goalStatus').className = `pill ${goalClass}`;
+  $('goalStatus').textContent = `Projected ${projected.toFixed(1)} / ${GOAL_TOTAL}`;
+
+  // table
+  const tbody = document.querySelector('#logTable tbody');
+  tbody.innerHTML='';
+  st.entries.slice().reverse().forEach((e,idx)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${fmtTime(e.time)}</td>
+                    <td>${e.item||''}</td>
+                    <td>${e.qty}</td>
+                    <td>${e.from}</td>
+                    <td>${e.to}</td>
+                    <td>${e.notes||''}</td>
+                    <td><button data-id="${e.id}" class="btn secondary">Delete</button></td>`;
+    tbody.appendChild(tr);
+  });
+  // delete handlers
+  document.querySelectorAll('td button').forEach(btn=>{
+    btn.onclick = ()=>{
+      const id = btn.getAttribute('data-id');
+      const {day, all} = getState();
+      all[day].entries = all[day].entries.filter(x=>x.id!==id);
+      setState(all);
+      refresh();
+    };
+  });
+}
+
+$('startShift').onclick = ()=>{
+  const {day, all} = getState();
+  all[day].shiftStart = nowISO();
+  setState(all);
+  refresh();
+};
+$('endShift').onclick = ()=>{
+  const {day, all} = getState();
+  all[day].shiftStart = null;
+  setState(all);
+  refresh();
+};
+
+function addEntry(){
+  const item = $('item').value.trim();
+  const qty = Math.max(1, Number($('qty').value||1));
+  const fromBin = clampBin($('fromBin').value);
+  const toBin = clampBin($('toBin').value);
+  const notes = $('notes').value.trim();
+  // basic validation
+  const binOk = /^[A-L]-\d{2}-\d$/.test(fromBin) && /^[A-L]-\d{2}-\d$/.test(toBin);
+  if(!binOk){ alert('Bins must be in format LETTER-##-# with letter A–L. Example: A-10-4'); return; }
+  const {day, all} = getState();
+  all[day].entries.push({id:crypto.randomUUID(), time: nowISO(), item:item||'', qty, from:fromBin, to:toBin, notes});
+  setState(all);
+  $('item').value=''; $('qty').value='1'; $('fromBin').value=''; $('toBin').value=''; $('notes').value='';
+  refresh();
+}
+$('add').onclick = addEntry;
+
+$('exportCsv').onclick = ()=>{
+  const {day, all} = getState();
+  const rows = all[day].entries.map(e=>({time:e.time,item:e.item,qty:e.qty,from:e.from,to:e.to,notes:e.notes}));
+  const headers = ['time','item','qty','from','to','notes'];
+  const csv = [headers.join(','), ...rows.map(r=>headers.map(h=>`"${String(r[h]??'').replaceAll('"','""')}"`).join(','))].join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pallet_moves_${day}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+$('clearAll').onclick = ()=>{
+  if(confirm('Clear ALL data for today?')){
+    const {day, all} = getState();
+    all[day] = {shiftStart:null, entries:[]};
+    setState(all);
+    refresh();
+  }
+};
+
+// init
+refresh();
+</script>
+</body>
+</html>
