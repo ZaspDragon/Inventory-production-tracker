@@ -1,26 +1,14 @@
-# Pallet Tracker — 45 in 8
+# Pallet Tracker — Auto OCR + Camera (A–Z bins)
 
-A lightweight offline web app to track pallet moves and productivity against a goal of **45 pallets in 8 hours** (5.625/hr).
+**What’s new**
+- Live camera capture with `getUserMedia` (rear camera by default) + **auto OCR → parse → import**.
+- File upload also supported; both paths auto-import recognized moves.
+- Bins now accept **A–Z letters, digits, and dashes** anywhere (1–32 chars). Examples: `ZR-01-7`, `MEZZ-12`, `A-10-4`.
 
-## Features
-- Add entries with *Item #*, *Qty*, *From Bin*, *To Bin*, and *Notes*
-- Bins auto-format to `LETTER-##-#` (A–L only) and are validated
-- Start/End Shift and live stats: elapsed time, pallets moved, rate/hr, projected total vs goal
-- Stores data locally in your browser (no server required)
-- Export the day’s log to CSV
-- Works on phone, tablet, or desktop
+**Use it**
+1. Open `index.html` in Chrome/Edge/Firefox (mobile or desktop).
+2. Tap **Capture & Scan** (or upload a photo). When OCR finishes, valid rows are added automatically.
+3. Manual add still works. Data is stored locally; export CSV anytime.
 
-## How to use
-1. Open `index.html` in any modern browser (you can double-click it).
-2. Click **Start / Restart Shift** when you begin.
-3. Enter moves as you work. Use `A-10-4` style bins (A–L allowed).
-4. Export CSV at the end of the shift if you need to send a report.
-
-## Deploy (optional)
-- **GitHub Pages**: push this folder to a repo and enable Pages.
-- **Replit / Netlify / Vercel**: serve as static site; no backend needed.
-
-## Customize
-- Change the goal by editing `GOAL_TOTAL` or `GOAL_HOURS` near the top of the `<script>` in `index.html`.
-- Add fields or columns by expanding the table and the entry object.
-
+**Deploy**
+- Drop `index.html` into a GitHub Pages repo (root), enable Pages, done.
